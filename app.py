@@ -3,89 +3,55 @@ import pandas as pd
 import networkx as nx
 import requests
 
-# 1. Configuración de página (Sin estilos CSS para evitar SyntaxErrors)
-st.set_page_config(page_title="ALE! Swap", layout="wide")
+# 1. Configuración mínima absoluta
+st.set_page_config(page_title="ALE! Swap")
 
-# 2. Enlaces a tus Google Sheets
+# 2. Enlaces a tus datos
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 URL_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-# 3. Diccionario manual para asegurar nombres de sets clave
-DICCIONARIO_SETS = {
-    "10316": "Rivendell",
-    "75192": "Millennium Falcon UCS",
-    "21333": "The Starry Night",
-    "10305": "Lion Knights' Castle",
-    "75331": "The Razor Crest UCS"
-}
-
-@st.cache_data(ttl=600)
-def traer_nombre(set_id):
-    sid = str(set_id).strip()
-    if sid in DICCIONARIO_SETS:
-        return DICCIONARIO_SETS[sid]
+# 3. Función de carga ultra-simple
+def cargar_datos_basicos():
     try:
-        search_id = sid if "-" in sid else f"{sid}-1"
-        url = f"https://rebrickable.com/api/v3/lego/sets/{search_id}/"
-        headers = {"Authorization": "key 9d7b97368d90473950669f64e2621453"}
-        r = requests.get(url, headers=headers, timeout=3)
-        if r.status_code == 200:
-            return r.json().get("name", f"Set {sid}")
-    except:
-        pass
-    return f"Set LEGO {sid}"
-
-def cargar_datos():
-    try:
-        df_inv = pd.read_csv(URL_INV).fillna("---")
-        df_des = pd.read_csv(URL_DES).fillna("---")
-        
-        # Limpiar columnas
-        df_inv.columns = [c.strip() for c in df_inv.columns]
-        df_des.columns = [c.strip() for c in df_des.columns]
-        
-        # Asignar nombres
-        df_inv["Nombre"] = df_inv["SetID"].astype(str).apply(traer_nombre)
-        df_des["Nombre"] = df_des["SetID"].astype(str).apply(traer_nombre)
-        
-        return df_inv, df_des
+        inv = pd.read_csv(URL_INV).fillna("")
+        des = pd.read_csv(URL_DES).fillna("")
+        inv.columns = [c.strip() for c in inv.columns]
+        des.columns = [c.strip() for c in des.columns]
+        return inv, des
     except Exception as e:
-        st.error(f"Error cargando Excel: {e}")
+        st.error(f"Error de conexión: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# 4. Interfaz de Usuario
-st.title("🏗️ Intercambio Masivo ALE!")
+# 4. Interfaz limpia
+st.title("🏗️ ALE! Intercambio Masivo")
 
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg", width=100)
-    st.markdown("---")
-    if st.button("🔄 Limpiar Memoria"):
+    st.write("Panel de Control")
+    if st.button("Limpiar Caché"):
         st.cache_data.clear()
-        st.warning("Datos limpiados. Refresca la página en tu navegador (F5).")
+        st.info("Caché limpia. Refresca el navegador.")
 
-inv, des = cargar_datos()
+inv, des = cargar_datos_basicos()
 
-t1, t2, t3 = st.tabs(["📦 Inventario", "❤️ Deseos", "🚀 Calcular"])
+tab1, tab2, tab3 = st.tabs(["📦 Inventario", "❤️ Deseos", "🚀 Calcular"])
 
-with t1:
+with tab1:
     if not inv.empty:
-        # st.table es lo más estable para evitar errores de navegador
-        st.table(inv[["Socio", "SetID", "Nombre"]])
+        # st.write es lo más seguro contra el error LargeUtf8
+        st.write("Listado de Sets Disponibles:")
+        st.write(inv[["Socio", "SetID"]])
 
-with t2:
+with tab2:
     if not des.empty:
-        st.table(des[["Socio", "SetID", "Nombre"]])
+        st.write("Listado de Sets Buscados:")
+        st.write(des[["Socio", "SetID"]])
 
-with t3:
-    if st.button("Calcular Intercambios Circulares"):
+with tab3:
+    if st.button("Buscar Cambios Posibles"):
         G = nx.DiGraph()
-        nombres_map = pd.concat([inv, des]).set_index("SetID")["Nombre"].to_dict()
-        
         for _, r_des in des.iterrows():
             pide = str(r_des["Socio"]).strip()
             item = str(r_des["SetID"]).strip()
-            
-            # Buscar poseedores
             duenos = inv[inv["SetID"].astype(str).str.strip() == item]
             for _, r_inv in duenos.iterrows():
                 tiene = str(r_inv["Socio"]).strip()
@@ -94,12 +60,12 @@ with t3:
         
         ciclos = list(nx.simple_cycles(G))
         if not ciclos:
-            st.info("No hay ciclos encontrados. ¡Sigue añadiendo sets!")
+            st.warning("No hay intercambios circulares todavía.")
         else:
-            for i, ciclo in enumerate(ciclos):
-                with st.expander(f"PROPUESTA #{i+1}"):
-                    for j in range(len(ciclo)):
-                        da = ciclo[j]
-                        recibe = ciclo[(j+1)%len(ciclo)]
-                        sid = G[da][recibe]["set_id"]
-                        st.write(f"✅ **{da}** da **{sid}** ({nombres_map.get(sid)}) a **{recibe}**")
+            for i, c in enumerate(ciclos):
+                st.success(f"Propuesta de Cambio #{i+1}")
+                for j in range(len(c)):
+                    da = c[j]
+                    recibe = c[(j+1)%len(c)]
+                    sid = G[da][recibe]["set_id"]
+                    st.write(f"✅ {da} entrega {sid} a {recibe}")
