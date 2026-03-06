@@ -2,79 +2,75 @@ import streamlit as st
 import pandas as pd
 import networkx as nx
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="LEGO Swap Asociación", page_icon="🧩", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="LEGO Swap", page_icon="🧩", layout="wide")
 
-# Enlaces de tus pestañas
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 URL_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def cargar_datos():
     try:
-        # Cargamos todo como string puro para evitar el error LargeUtf8
+        # Forzamos a que todo sea texto para evitar el error LargeUtf8
         inv = pd.read_csv(URL_INV, dtype=str).fillna("")
         des = pd.read_csv(URL_DES, dtype=str).fillna("")
-        
-        # Limpieza técnica de columnas
         inv.columns = [str(c).strip() for c in inv.columns]
         des.columns = [str(c).strip() for c in des.columns]
-        
         return inv, des
     except Exception as e:
         st.error(f"Error de conexión: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# --- INTERFAZ ---
 st.title("🧩 LEGO Swap: Sistema de Intercambio")
-st.markdown("Gestión de sets y deseos en tiempo real.")
 
 inv, des = cargar_datos()
+
+# --- ESTILO PARA TABLAS ---
+# Este bloque elimina cualquier procesamiento raro del navegador
+st.markdown("""
+<style>
+    table { width: 100%; border-collapse: collapse; }
+    th { background-color: #f0f2f6; text-align: left; padding: 10px; }
+    td { padding: 10px; border-bottom: 1px solid #ddd; }
+</style>
+""", unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📦 Inventario", "❤️ Deseos", "🚀 Calcular"])
 
 with tab1:
-    st.subheader("Sets que los socios ofrecen")
+    st.header("Sets Disponibles")
     if not inv.empty:
-        # SOLUCIÓN AL ERROR ROSA: Usamos st.table() en lugar de st.dataframe()
-        st.table(inv)
-    else:
-        st.info("Inventario vacío.")
+        # USAMOS HTML PURO: Esto es lo que mata el error rosa
+        st.write(inv.to_html(index=False, escape=False), unsafe_allow_html=True)
 
 with tab2:
-    st.subheader("Sets que los socios buscan")
+    st.header("Lista de Deseos")
     if not des.empty:
-        st.table(des)
-    else:
-        st.info("Sin deseos registrados.")
+        st.write(des.to_html(index=False, escape=False), unsafe_allow_html=True)
 
 with tab3:
-    st.subheader("Intercambios Sugeridos")
-    if st.button("🔥 ¡Calcular ahora!", type="primary"):
-        if inv.empty or des.empty:
-            st.warning("Faltan datos para procesar.")
-        else:
-            G = nx.DiGraph()
-            for _, row_pide in des.iterrows():
-                pide = str(row_pide['Socio']).strip()
-                set_id = str(row_pide['SetID']).strip()
-                duenos = inv[inv['SetID'].astype(str).str.strip() == set_id]
-                for _, row_dueno in duenos.iterrows():
-                    da = str(row_dueno['Socio']).strip()
-                    if pide != da:
-                        G.add_edge(da, pide, set_id=set_id)
+    st.header("Cadenas de Cambio")
+    if st.button("🔄 Ejecutar Motor", type="primary"):
+        G = nx.DiGraph()
+        for _, row in des.iterrows():
+            pide, set_id = str(row['Socio']).strip(), str(row['SetID']).strip()
+            duenos = inv[inv['SetID'].astype(str).str.strip() == set_id]
+            for _, d in duenos.iterrows():
+                da = str(d['Socio']).strip()
+                if pide != da:
+                    G.add_edge(da, pide, set_id=set_id)
 
-            ciclos = sorted(list(nx.simple_cycles(G)), key=len, reverse=True)
-            
-            if not ciclos:
-                st.info("No hay ciclos de cambio posibles hoy.")
-            else:
-                usados = set()
-                for i, ciclo in enumerate(ciclos, 1):
-                    if any(s in usados for s in ciclo): continue
-                    with st.expander(f"✅ Propuesta #{i} ({len(ciclo)} socios)", expanded=True):
-                        for j in range(len(ciclo)):
-                            dante, recp = ciclo[j], ciclo[(j+1)%len(ciclo)]
-                            st.write(f"👤 **{dante}** entrega el Set **{G[dante][recp]['set_id']}** ➡️ a **{recp}**")
-                    for s in ciclo: usados.add(s)
-                st.success(f"¡{len(usados)} socios pueden intercambiar!")
+        ciclos = sorted(list(nx.simple_cycles(G)), key=len, reverse=True)
+        
+        if not ciclos:
+            st.info("No hay cambios circulares posibles hoy.")
+        else:
+            usados = set()
+            for i, ciclo in enumerate(ciclos, 1):
+                if any(s in usados for s in ciclo): continue
+                with st.expander(f"✅ Propuesta #{i}", expanded=True):
+                    for j in range(len(ciclo)):
+                        dante, recp = ciclo[j], ciclo[(j+1)%len(ciclo)]
+                        st.write(f"👤 **{dante}** da Set **{G[dante][recp]['set_id']}** ➡️ a **{recp}**")
+                for s in ciclo: usados.add(s)
+            st.success(f"¡Intercambios logrados para {len(usados)} personas!")
