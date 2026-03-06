@@ -4,79 +4,79 @@ import networkx as nx
 import requests
 
 # 1. Configuración de página
-st.set_page_config(page_title="ALE! Swap v11", layout="wide")
+st.set_page_config(page_title="ALE! Swap v12", layout="wide")
 
-# 2. URLs de tus Google Sheets
+# 2. URLs (Verificadas línea por línea)
 U_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 U_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-# 3. Función para obtener nombres de sets (con caché para ir rápido)
-@st.cache_data
-def get_name(sid):
+# 3. Motor de Nombres (Caché de 1 hora)
+@st.cache_data(ttl=3600)
+def get_lego_name(sid):
     s = str(sid).strip()
-    # Favoritos rápidos
     favs = {"10316": "Rivendell", "75192": "Millennium Falcon UCS", "21333": "The Starry Night"}
     if s in favs: return favs[s]
     try:
         r = requests.get(f"https://rebrickable.com/api/v3/lego/sets/{s}-1/", 
                          headers={"Authorization": "key 9d7b97368d90473950669f64e2621453"}, timeout=2)
-        if r.status_code == 200: return r.json().get('name', f"Lego {s}")
+        if r.status_code == 200: return r.json().get('name', f"Set {s}")
     except: pass
     return f"Lego {s}"
 
-# --- INICIO DE LA APP ---
+# --- PROCESAMIENTO ---
 st.title("Plataforma de Intercambio ALE!")
 
 try:
-    # Carga de datos original
-    inv = pd.read_csv(U_INV).fillna("")
-    des = pd.read_csv(U_DES).fillna("")
+    # Carga silenciosa (sin botones)
+    inv = pd.read_csv(U_INV).fillna("").astype(str)
+    des = pd.read_csv(U_DES).fillna("").astype(str)
     
-    # Limpieza básica de columnas
+    # Limpiar espacios en nombres de columnas
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    # Preparamos los datos con nombres antes de mostrar las tablas
-    with st.spinner("Cargando nombres de sets..."):
-        inv["Nombre"] = inv["SetID"].apply(get_name)
-        des["Nombre"] = des["SetID"].apply(get_name)
-    
-    # SECCIÓN 1: INVENTARIO EN TABLA
-    st.header("📦 Sets Disponibles para Intercambio")
-    # Mostramos solo las columnas deseadas y forzamos strings para evitar errores de tipo
-    tabla_inv = inv[["Socio", "SetID", "Nombre"]].astype(str)
-    st.table(tabla_inv)
+    # Convertir SetID a nombres ANTES de mostrar
+    inv["Nombre"] = inv["SetID"].apply(get_lego_name)
+    des["Nombre"] = des["SetID"].apply(get_lego_name)
 
-    # SECCIÓN 2: DESEOS EN TABLA
-    st.header("❤️ Sets Buscados por los Socios")
-    tabla_des = des[["Socio", "SetID", "Nombre"]].astype(str)
-    st.table(tabla_des)
+    # VISTAS (Convertimos a tabla estática para matar el error LargeUtf8)
+    st.header("📦 Inventario de Socios")
+    st.table(inv[["Socio", "SetID", "Nombre"]])
 
-    # SECCIÓN 3: CÁLCULO DE INTERCAMBIO
-    st.header("🚀 Resultado Óptimo Calculado")
-    
+    st.header("❤️ Lista de Deseos")
+    st.table(des[["Socio", "SetID", "Nombre"]])
+
+    # CÁLCULO DE CAMBIO
+    st.header("🚀 Intercambio Sugerido")
     G = nx.DiGraph()
+    n_map = pd.concat([inv, des]).set_index("SetID")["Nombre"].to_dict()
+    
     for _, rd in des.iterrows():
-        pide, sid = str(rd["Socio"]).strip(), str(rd["SetID"]).strip()
-        duenos = inv[inv["SetID"].astype(str).str.strip() == sid]
+        pide, sid = rd["Socio"].strip(), rd["SetID"].strip()
+        duenos = inv[inv["SetID"].str.strip() == sid]
         for _, ri in duenos.iterrows():
-            da = str(ri["Socio"]).strip()
+            da = ri["Socio"].strip()
             if pide != da:
                 G.add_edge(da, pide, sid=sid)
     
     ciclos = list(nx.simple_cycles(G))
     if not ciclos:
-        st.info("Buscando combinaciones... No hay intercambios circulares posibles con los datos actuales.")
+        st.info("No hay combinaciones circulares disponibles con los datos actuales.")
     else:
+        # Priorizar el ciclo más largo
         mejor = max(ciclos, key=len)
-        st.success(f"¡Se ha encontrado una cadena de intercambio para {len(mejor)} socios!")
-        
-        # Mostrar el resultado de la cadena de forma clara
+        res_list = []
         for j in range(len(mejor)):
             u1, u2 = mejor[j], mejor[(j+1)%len(mejor)]
-            item = G[u1][u2]["sid"]
-            nombre_item = inv[inv["SetID"].astype(str).str.strip() == item]["Nombre"].iloc[0]
-            st.write(f"✅ **{u1}** entrega el set **{item}** ({nombre_item}) a **{u2}**")
+            sid = G[u1][u2]["sid"]
+            res_list.append({
+                "Entrega (Socio)": u1,
+                "Set": f"{sid} - {n_map.get(sid)}",
+                "Recibe (Socio)": u2
+            })
+        
+        # Resultado final en tabla también
+        st.table(pd.DataFrame(res_list))
 
 except Exception as e:
-    st.error(f"Error al procesar las tablas: {e}")
+    st.error(f"Error de sistema: {e}")
