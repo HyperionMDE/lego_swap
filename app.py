@@ -32,9 +32,10 @@ def get_lego_info(sid):
     except: pass
     return info
 
-# 3. Diseño de tablas sin "SetID" ni "SWAP"
+# 3. Diseño de tablas estética ALE!
 def pintar_tabla_ale(df):
     if df.empty: return "<p>No hay datos registrados todavía.</p>"
+    # Renombrado de columnas para la visualización
     df_v = df.rename(columns={"SetID": "Set", "Socio Entrega": "Socio", "Socio Recibe": "Destinatario"})
     
     html = '<table style="width:100%; border-collapse: separate; border-spacing: 0; font-family: sans-serif; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">'
@@ -54,14 +55,14 @@ def pintar_tabla_ale(df):
     html += '</table>'
     return html
 
-# --- CABECERA OFICIAL (LOGO LEGO + LOGO ALE! NARANJA) ---
+# --- CABECERA CON LOGOS Y TÍTULO SOLICITADO ---
 st.write(f'''
-<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; gap: 40px; background-color: #f8f9fa; padding: 20px; border-radius: 15px; border-bottom: 5px solid #2E7D32;">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="80">
-    <img src="https://i.postimg.cc/qR0Y6P2R/logo-ale.png" width="180"> 
+<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; gap: 30px; background-color: #ffffff; padding: 20px; border-radius: 15px; border-bottom: 4px solid #2E7D32; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="70">
+    <img src="https://www.alebricks.com/foro/custom_avatar/avatar_2_1508999828.png" width="120" style="border-radius: 5px;"> 
     <div style="text-align: left;">
-        <h1 style="margin: 0; color: #2E7D32; font-size: 2em; line-height: 1.2;">ASOCIACIÓN ALE!</h1>
-        <p style="margin: 0; font-weight: bold; font-size: 1.2em; color: #333;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p>
+        <h1 style="margin: 0; color: #d11111; font-size: 1.8em; line-height: 1;">ASOCIACIÓN ALE!</h1>
+        <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 1.3em; color: #333; text-transform: uppercase;">Sistema de Intercambio Masivo de Sets entre Socios</p>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -72,7 +73,7 @@ try:
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    with st.spinner("Sincronizando catálogo con la asociación..."):
+    with st.spinner("Sincronizando con el servidor de ALE!..."):
         for df in [inv, des]:
             n_list, f_list = [], []
             for sid in df["SetID"]:
@@ -82,11 +83,11 @@ try:
             df["Nombre"] = n_list
             df["Imagen"] = f_list
 
-    # CONTENIDO
-    st.header("📦 Inventario Global (Sets ofrecidos)")
+    # SECCIONES DE LA APP
+    st.header("📦 Inventario de la Asociación")
     st.markdown(pintar_tabla_ale(inv[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("❤️ Lista Maestra (Sets deseados)")
+    st.header("❤️ Lista Maestra de Deseos")
     st.markdown(pintar_tabla_ale(des[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
     st.header("🚀 Propuesta de Intercambio Circular Óptima")
@@ -113,7 +114,7 @@ try:
         
         st.markdown(pintar_tabla_ale(pd.DataFrame(res_list)), unsafe_allow_html=True)
     else:
-        st.info("No hay ciclos de intercambio completos. ¡Anima a más socios a participar!")
+        st.info("No hay ciclos de intercambio detectados actualmente.")
 
 except Exception as e:
-    st.error(f"Error técnico: {e}")
+    st.error(f"Error en la carga: {e}")
