@@ -63,13 +63,20 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Barra Lateral Corregida) ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg", width=100)
+    # Mostramos los dos logos juntos
+    col_logo1, col_logo2 = st.columns(2)
+    with col_logo1:
+        st.image("https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg", width=80)
+    with col_logo2:
+        st.image("https://www.alebricks.com/foro/Themes/OmegaOrange/images/header_foro2017.png", width=120)
+    
     st.title("🧩 LEGO Swap")
     st.markdown("### **Asociación ALE!**")
-    st.write("Plataforma oficial de intercambio masivo.")
-    st.image("https://cdn.pixabay.com/photo/2016/09/27/18/43/lego-1699047_1280.png", use_column_width=True)
+    st.info("Plataforma oficial de intercambio masivo para socios.")
+    st.markdown("---")
+    st.write("🔧 **Soporte:** Si ves datos incorrectos, actualiza el Google Sheets de la asociación.")
 
 # --- PANEL PRINCIPAL ---
 st.title("🧩 LEGO Swap: Motor de Intercambios")
@@ -95,7 +102,6 @@ with tab2:
 
 with tab3:
     st.subheader("Algoritmo de Intercambio ALE!")
-    st.write("Haz clic para encontrar las mejores rutas de intercambio entre socios.")
     if st.button("🔥 ¡Lanzar Intercambio Masivo!", type="primary"):
         if inv.empty or des.empty:
             st.warning("Faltan datos para procesar.")
@@ -113,7 +119,7 @@ with tab3:
             ciclos = sorted(list(nx.simple_cycles(G)), key=len, reverse=True)
             
             if not ciclos:
-                st.info("No se han encontrado ciclos posibles. ¡Anima a más socios a añadir deseos!")
+                st.info("No se han encontrado ciclos posibles hoy.")
             else:
                 usados = set()
                 for i, ciclo in enumerate(ciclos, 1):
@@ -123,4 +129,4 @@ with tab3:
                             dante, recp = ciclo[j], ciclo[(j+1)%len(ciclo)]
                             st.write(f"👤 **{dante}** entrega el Set **{G[dante][recp]['set_id']}** ➡️ a **{recp}**")
                     for s in ciclo: usados.add(s)
-                st.success(f"¡Se han encontrado soluciones para {len(usados)} socios de ALE!")
+                st.success(f"¡Se han encontrado soluciones para {len(usados)} socios!")
