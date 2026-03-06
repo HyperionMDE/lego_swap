@@ -3,97 +3,96 @@ import pandas as pd
 import networkx as nx
 import requests
 
-# 1. Ajustes de Página
-st.set_page_config(page_title="ALE! Swap v2.0", layout="wide")
+# 1. Configuración de Página (Sin barra lateral por defecto)
+st.set_page_config(page_title="ALE! Swap v3.0", layout="centered")
 
-# 2. Fuentes de Datos
+# URLs de datos
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 URL_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-# 3. Motor de Nombres (Rebrickable + Diccionario Local)
+# 2. Motor de Nombres de Sets
 @st.cache_data(ttl=3600)
-def get_lego_name(set_id):
+def fetch_set_name(set_id):
     sid = str(set_id).strip()
-    # Aseguramos los sets de tus capturas
-    hardcoded = {
-        "10316": "Rivendell",
-        "75192": "Millennium Falcon UCS",
-        "21333": "The Starry Night"
-    }
-    if sid in hardcoded:
-        return hardcoded[sid]
+    # Diccionario de emergencia para asegurar tus sets principales
+    hardcoded = {"10316": "Rivendell", "75192": "Millennium Falcon UCS", "21333": "The Starry Night"}
+    if sid in hardcoded: return hardcoded[sid]
     try:
         url = f"https://rebrickable.com/api/v3/lego/sets/{sid}-1/"
         headers = {"Authorization": "key 9d7b97368d90473950669f64e2621453"}
         r = requests.get(url, headers=headers, timeout=3)
-        if r.status_code == 200:
-            return r.json().get('name', f"Set {sid}")
-    except:
-        pass
-    return f"LEGO {sid}"
+        if r.status_code == 200: return r.json().get('name', f"Set {sid}")
+    except: pass
+    return f"Lego {sid}"
 
-# 4. Carga de Datos
-def load_data():
+# 3. Función para mostrar tablas sin errores de "LargeUtf8"
+def mostrar_tabla_segura(df):
+    # Convertimos el DataFrame a Markdown (Texto puro)
+    # Esto evita que Streamlit use su motor de tablas complejo que falla
+    st.markdown(df.to_markdown(index=False))
+
+# 4. Carga de datos
+def cargar_datos_v3():
     try:
-        i = pd.read_csv(URL_INV).fillna("")
-        d = pd.read_csv(URL_DES).fillna("")
-        i.columns = [c.strip() for c in i.columns]
-        d.columns = [c.strip() for c in d.columns]
-        # Añadir nombres de sets
-        i["Nombre"] = i["SetID"].astype(str).apply(get_lego_name)
-        d["Nombre"] = d["SetID"].astype(str).apply(get_lego_name)
-        return i, d
+        inv = pd.read_csv(URL_INV).fillna("")
+        des = pd.read_csv(URL_DES).fillna("")
+        inv.columns = [c.strip() for c in inv.columns]
+        des.columns = [c.strip() for c in des.columns]
+        inv["Nombre"] = inv["SetID"].astype(str).apply(fetch_set_name)
+        des["Nombre"] = des["SetID"].astype(str).apply(fetch_set_name)
+        return inv, des
     except Exception as e:
-        st.error(f"Error cargando datos: {e}")
+        st.error(f"Error de conexión: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# 5. Cabecera Visual (Como la que te gustaba)
-col_logo, col_text = st.columns([1, 5])
-with col_logo:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg", width=80)
-with col_text:
-    st.title("Plataforma de Intercambio ALE!")
-    st.caption("Asociación Cultural de Aficionados a LEGO® de España | v2.0")
+# --- INTERFAZ ---
 
-# 6. Lógica de la App
-inv, des = load_data()
+# Logo y Título centrados
+st.image("https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg", width=100)
+st.title("Plataforma de Intercambio ALE!")
+st.write("Versión 3.0 - Limpia y Estable")
 
-tab1, tab2, tab3 = st.tabs(["📦 Inventario", "❤️ Deseos", "🚀 Calcular Cambios"])
+inv_df, des_df = cargar_datos_v3()
+
+# Botón de refresco ahora arriba y visible, ya que no hay barra lateral
+if st.button("🔄 Forzar Recarga de Datos"):
+    st.cache_data.clear()
+    st.rerun()
+
+tab1, tab2, tab3 = st.tabs(["📦 Inventario", "❤️ Deseos", "🚀 Calcular"])
 
 with tab1:
-    if not inv.empty:
-        # Usamos st.table para evitar el error "LargeUtf8" definitivamente
-        st.table(inv[["Socio", "SetID", "Nombre"]])
+    if not inv_df.empty:
+        st.subheader("Sets Disponibles")
+        mostrar_tabla_segura(inv_df[["Socio", "SetID", "Nombre"]])
 
 with tab2:
-    if not des.empty:
-        st.table(des_df := des[["Socio", "SetID", "Nombre"]])
+    if not des_df.empty:
+        st.subheader("Sets Buscados")
+        mostrar_tabla_segura(des_df[["Socio", "SetID", "Nombre"]])
 
 with tab3:
-    if st.button("Buscar Intercambios Circulares"):
+    if st.button("🔍 Buscar Cambios Circulares"):
         G = nx.DiGraph()
-        # Mapa de nombres para el resultado final
-        n_map = pd.concat([inv, des]).set_index("SetID")["Nombre"].to_dict()
+        n_map = pd.concat([inv_df, des_df]).set_index("SetID")["Nombre"].to_dict()
         
-        for _, rd in des.iterrows():
-            u_pide = str(rd["Socio"]).strip()
-            s_id = str(rd["SetID"]).strip()
-            # Quién lo tiene
-            duenos = inv[inv["SetID"].astype(str).str.strip() == s_id]
-            for _, ri in duenos.iterrows():
-                u_da = str(ri["Socio"]).strip()
-                if u_pide != u_da:
-                    G.add_edge(u_da, u_pide, set_id=s_id)
+        for _, rd in des_df.iterrows():
+            pide = str(rd["Socio"]).strip()
+            sid = str(rd["SetID"]).strip()
+            poseedores = inv_df[inv_df["SetID"].astype(str).str.strip() == sid]
+            for _, ri in poseedores.iterrows():
+                da = str(ri["Socio"]).strip()
+                if pide != da:
+                    G.add_edge(da, pide, set_id=sid)
         
         ciclos = list(nx.simple_cycles(G))
         if not ciclos:
-            st.info("No se han detectado ciclos de intercambio.")
+            st.info("No hay intercambios circulares posibles ahora mismo.")
         else:
-            st.success(f"¡{len(ciclos)} combinaciones encontradas!")
+            st.success(f"¡Encontradas {len(ciclos)} propuestas!")
             for idx, c in enumerate(ciclos):
-                with st.expander(f"Propuesta #{idx+1}"):
+                with st.expander(f"PROPUESTA #{idx+1}"):
                     for j in range(len(c)):
-                        dante = c[j]
-                        recept = c[(j+1)%len(c)]
-                        sid = G[dante][recept]["set_id"]
-                        st.write(f"🎁 **{dante}** entrega **{sid}** ({n_map.get(sid)}) a **{recept}**")
+                        u1, u2 = c[j], c[(j+1)%len(c)]
+                        item = G[u1][u2]["set_id"]
+                        st.write(f"✅ **{u1}** da **{item}** ({n_map.get(item)}) a **{u2}**")
