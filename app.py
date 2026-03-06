@@ -4,7 +4,7 @@ import networkx as nx
 import requests
 
 # 1. Configuración de página
-st.set_page_config(page_title="ALE! Swap Masivo", layout="wide")
+st.set_page_config(page_title="ALE! Intercambio Masivo", layout="wide")
 
 # URLs de Google Sheets
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
@@ -32,7 +32,7 @@ def get_lego_info(sid):
     except: pass
     return info
 
-# 3. Función de tabla con diseño ALE! (Sin SetID)
+# 3. Función de tabla con diseño ALE! (Sin SetID ni SWAP)
 def pintar_tabla_ale(df):
     if df.empty: return "<p>No hay datos registrados todavía.</p>"
     # Renombrado forzado para la vista
@@ -55,11 +55,12 @@ def pintar_tabla_ale(df):
     html += '</table>'
     return html
 
-# --- CABECERA MEJORADA ---
-st.write('<div style="display: flex; align-items: center; margin-bottom: 20px;">'
-         '<img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="80" style="margin-right: 20px;">'
-         '<div><h1 style="margin: 0; color: #d11111;">ALE! SWAP</h1>'
-         '<p style="margin: 0; font-weight: bold; font-size: 1.2em;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p></div>'
+# --- CABECERA CON DOBLE LOGO (LEGO Y ALE!) Y TÍTULO SIN SWAP ---
+st.write('<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; gap: 30px; padding: 10px;">'
+         '<img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="90">'
+         '<img src="http://www.alebricks.com/wp-content/uploads/2015/05/logo_ale_web.png" width="160" onerror="this.src=\'https://via.placeholder.com/160x90?text=ALE!\'"> ' # URL alternativa y robusta
+         '<div><h1 style="margin: 0; color: #2E7D32; font-size: 2.2em;">ASOCIACIÓN ALE!</h1>'
+         '<p style="margin: 0; font-weight: bold; font-size: 1.4em;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p></div>'
          '</div>', unsafe_allow_html=True)
 
 try:
@@ -68,7 +69,7 @@ try:
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    with st.spinner("Actualizando catálogo masivo..."):
+    with st.spinner("Actualizando catálogo masivo de ALE!..."):
         for df in [inv, des]:
             n_list, f_list = [], []
             for sid in df["SetID"]:
@@ -79,13 +80,13 @@ try:
             df["Imagen"] = f_list
 
     # SECCIONES
-    st.header("📦 Inventario de la Asociación")
+    st.header("📦 Inventario Global de la Asociación")
     st.markdown(pintar_tabla_ale(inv[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("❤️ Lista Global de Deseos")
+    st.header("❤️ Lista Maestra de Deseos")
     st.markdown(pintar_tabla_ale(des[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("🚀 Propuesta de Intercambio Circular")
+    st.header("🚀 Propuesta de Intercambio Circular (Óptima)")
     G = nx.DiGraph()
     m_info = pd.concat([inv, des]).drop_duplicates('SetID').set_index('SetID')
 
@@ -107,10 +108,10 @@ try:
             i_c = m_info.loc[sid_c, "Imagen"] if sid_c in m_info.index else ""
             res_list.append({"Socio Entrega": u1, "SetID": sid_c, "Nombre": n_c, "Imagen": i_c, "Socio Recibe": u2})
         
-        # Tabla final con los nombres de columna corregidos
+        # Tabla final con los nombres de columna corregidos (Sin SetID ni SWAP)
         st.markdown(pintar_tabla_ale(pd.DataFrame(res_list)), unsafe_allow_html=True)
     else:
-        st.info("Buscando combinaciones... Todavía no hay un ciclo de intercambio cerrado.")
+        st.info("Buscando carambolas... Todavía no hay un ciclo de intercambio circular completo.")
 
 except Exception as e:
-    st.error(f"Error en la plataforma: {e}")
+    st.error(f"Error técnico en la plataforma: {e}")
