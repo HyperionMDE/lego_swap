@@ -4,7 +4,7 @@ import networkx as nx
 import requests
 
 # 1. Configuración de página
-st.set_page_config(page_title="ALE! Intercambio Masivo", layout="wide")
+st.set_page_config(page_title="Intercambio Masivo ALE!", layout="wide")
 
 # URLs de Google Sheets
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
@@ -32,13 +32,12 @@ def get_lego_info(sid):
     except: pass
     return info
 
-# 3. Función de tabla con diseño ALE! (Sin SetID ni SWAP)
+# 3. Diseño de tablas sin "SetID" ni "SWAP"
 def pintar_tabla_ale(df):
     if df.empty: return "<p>No hay datos registrados todavía.</p>"
-    # Renombrado forzado para la vista
     df_v = df.rename(columns={"SetID": "Set", "Socio Entrega": "Socio", "Socio Recibe": "Destinatario"})
     
-    html = '<table style="width:100%; border-collapse: separate; border-spacing: 0; font-family: sans-serif; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">'
+    html = '<table style="width:100%; border-collapse: separate; border-spacing: 0; font-family: sans-serif; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">'
     html += '<tr style="background-color: #2E7D32; color: white; text-align: left;">'
     for col in df_v.columns:
         html += f'<th style="padding: 15px;">{col}</th>'
@@ -55,13 +54,17 @@ def pintar_tabla_ale(df):
     html += '</table>'
     return html
 
-# --- CABECERA CON DOBLE LOGO (LEGO Y ALE!) Y TÍTULO SIN SWAP ---
-st.write('<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; gap: 30px; padding: 10px;">'
-         '<img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="90">'
-         '<img src="http://www.alebricks.com/wp-content/uploads/2015/05/logo_ale_web.png" width="160" onerror="this.src=\'https://via.placeholder.com/160x90?text=ALE!\'"> ' # URL alternativa y robusta
-         '<div><h1 style="margin: 0; color: #2E7D32; font-size: 2.2em;">ASOCIACIÓN ALE!</h1>'
-         '<p style="margin: 0; font-weight: bold; font-size: 1.4em;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p></div>'
-         '</div>', unsafe_allow_html=True)
+# --- CABECERA OFICIAL (LOGO LEGO + LOGO ALE! NARANJA) ---
+st.write(f'''
+<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; gap: 40px; background-color: #f8f9fa; padding: 20px; border-radius: 15px; border-bottom: 5px solid #2E7D32;">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="80">
+    <img src="https://i.postimg.cc/qR0Y6P2R/logo-ale.png" width="180"> 
+    <div style="text-align: left;">
+        <h1 style="margin: 0; color: #2E7D32; font-size: 2em; line-height: 1.2;">ASOCIACIÓN ALE!</h1>
+        <p style="margin: 0; font-weight: bold; font-size: 1.2em; color: #333;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p>
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
 try:
     inv = pd.read_csv(URL_INV).fillna("").astype(str)
@@ -69,7 +72,7 @@ try:
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    with st.spinner("Actualizando catálogo masivo de ALE!..."):
+    with st.spinner("Sincronizando catálogo con la asociación..."):
         for df in [inv, des]:
             n_list, f_list = [], []
             for sid in df["SetID"]:
@@ -79,14 +82,14 @@ try:
             df["Nombre"] = n_list
             df["Imagen"] = f_list
 
-    # SECCIONES
-    st.header("📦 Inventario Global de la Asociación")
+    # CONTENIDO
+    st.header("📦 Inventario Global (Sets ofrecidos)")
     st.markdown(pintar_tabla_ale(inv[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("❤️ Lista Maestra de Deseos")
+    st.header("❤️ Lista Maestra (Sets deseados)")
     st.markdown(pintar_tabla_ale(des[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("🚀 Propuesta de Intercambio Circular (Óptima)")
+    st.header("🚀 Propuesta de Intercambio Circular Óptima")
     G = nx.DiGraph()
     m_info = pd.concat([inv, des]).drop_duplicates('SetID').set_index('SetID')
 
@@ -108,10 +111,9 @@ try:
             i_c = m_info.loc[sid_c, "Imagen"] if sid_c in m_info.index else ""
             res_list.append({"Socio Entrega": u1, "SetID": sid_c, "Nombre": n_c, "Imagen": i_c, "Socio Recibe": u2})
         
-        # Tabla final con los nombres de columna corregidos (Sin SetID ni SWAP)
         st.markdown(pintar_tabla_ale(pd.DataFrame(res_list)), unsafe_allow_html=True)
     else:
-        st.info("Buscando carambolas... Todavía no hay un ciclo de intercambio circular completo.")
+        st.info("No hay ciclos de intercambio completos. ¡Anima a más socios a participar!")
 
 except Exception as e:
-    st.error(f"Error técnico en la plataforma: {e}")
+    st.error(f"Error técnico: {e}")
