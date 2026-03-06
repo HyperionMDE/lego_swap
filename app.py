@@ -3,14 +3,14 @@ import pandas as pd
 import networkx as nx
 import requests
 
-# 1. Configuración de página
-st.set_page_config(page_title="ALE! Swap v12", layout="wide")
+# 1. Configuración de página ultra-compatible
+st.set_page_config(page_title="ALE! Swap v13", layout="wide")
 
-# 2. URLs (Verificadas línea por línea)
+# 2. URLs de Google Sheets (Verificadas)
 U_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 U_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-# 3. Motor de Nombres (Caché de 1 hora)
+# 3. Motor de Nombres (Caché inteligente)
 @st.cache_data(ttl=3600)
 def get_lego_name(sid):
     s = str(sid).strip()
@@ -23,33 +23,45 @@ def get_lego_name(sid):
     except: pass
     return f"Lego {s}"
 
-# --- PROCESAMIENTO ---
+# 4. Función para pintar tablas sin que Streamlit se rompa
+def mostrar_tabla_html(df):
+    # Convertimos el DataFrame a HTML puro para evitar el error LargeUtf8
+    estilo = """
+    <style>
+        .mystyle {font-family: sans-serif; border-collapse: collapse; width: 100%;}
+        .mystyle td, .mystyle th {border: 1px solid #ddd; padding: 8px;}
+        .mystyle tr:nth-child(even){background-color: #f2f2f2;}
+        .mystyle th {padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #2E7D32; color: white;}
+    </style>
+    """
+    html_table = df.to_html(classes='mystyle', index=False, escape=False)
+    st.markdown(estilo + html_table, unsafe_allow_html=True)
+
+# --- FLUJO PRINCIPAL (SIN BOTONES) ---
 st.title("Plataforma de Intercambio ALE!")
 
 try:
-    # Carga silenciosa (sin botones)
+    # Carga de datos
     inv = pd.read_csv(U_INV).fillna("").astype(str)
     des = pd.read_csv(U_DES).fillna("").astype(str)
-    
-    # Limpiar espacios en nombres de columnas
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    # Convertir SetID a nombres ANTES de mostrar
+    # Asignar nombres a los sets
     inv["Nombre"] = inv["SetID"].apply(get_lego_name)
     des["Nombre"] = des["SetID"].apply(get_lego_name)
 
-    # VISTAS (Convertimos a tabla estática para matar el error LargeUtf8)
+    # VISTAS DE TABLAS
     st.header("📦 Inventario de Socios")
-    st.table(inv[["Socio", "SetID", "Nombre"]])
+    mostrar_tabla_html(inv[["Socio", "SetID", "Nombre"]])
 
     st.header("❤️ Lista de Deseos")
-    st.table(des[["Socio", "SetID", "Nombre"]])
+    mostrar_tabla_html(des[["Socio", "SetID", "Nombre"]])
 
-    # CÁLCULO DE CAMBIO
-    st.header("🚀 Intercambio Sugerido")
+    # CÁLCULO DE INTERCAMBIO
+    st.header("🚀 Resultado Óptimo")
     G = nx.DiGraph()
-    n_map = pd.concat([inv, des]).set_index("SetID")["Nombre"].to_dict()
+    n_map = pd.concat([inv, des]).drop_duplicates('SetID').set_index("SetID")["Nombre"].to_dict()
     
     for _, rd in des.iterrows():
         pide, sid = rd["Socio"].strip(), rd["SetID"].strip()
@@ -61,22 +73,20 @@ try:
     
     ciclos = list(nx.simple_cycles(G))
     if not ciclos:
-        st.info("No hay combinaciones circulares disponibles con los datos actuales.")
+        st.info("No hay ciclos de intercambio completos detectados.")
     else:
-        # Priorizar el ciclo más largo
         mejor = max(ciclos, key=len)
         res_list = []
         for j in range(len(mejor)):
             u1, u2 = mejor[j], mejor[(j+1)%len(mejor)]
             sid = G[u1][u2]["sid"]
             res_list.append({
-                "Entrega (Socio)": u1,
-                "Set": f"{sid} - {n_map.get(sid)}",
-                "Recibe (Socio)": u2
+                "Socio Entrega": u1,
+                "Set LEGO": f"{sid} - {n_map.get(sid, 'Set')}",
+                "Socio Recibe": u2
             })
         
-        # Resultado final en tabla también
-        st.table(pd.DataFrame(res_list))
+        mostrar_tabla_html(pd.DataFrame(res_list))
 
 except Exception as e:
-    st.error(f"Error de sistema: {e}")
+    st.error(f"Error crítico de ejecución: {e}")
