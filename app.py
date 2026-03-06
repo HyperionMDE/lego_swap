@@ -4,16 +4,17 @@ import networkx as nx
 import requests
 
 # 1. Configuración de página
-st.set_page_config(page_title="ALE! Swap v17", layout="wide")
+st.set_page_config(page_title="ALE! Swap Masivo", layout="wide")
 
 # URLs de Google Sheets
 URL_INV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=1446180612&single=true&output=csv"
 URL_DES = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRgUeWKSvV8S20NodEnV3RMVQtE3xQk84NgDEnSpBd9knQY8MxyrcOgCPO9lQSHlmrPjLecm5NuUiAA/pub?gid=119622631&single=true&output=csv"
 
-# 2. Motor de Datos y Diccionario Local
+# 2. Diccionario de emergencia para nombres
 NOMBRES_LOCALES = {
-    "10316": "Rivendell", "75192": "Millennium Falcon UCS", "21333": "The Starry Night",
-    "6886": "Galactic Peace Keeper", "10305": "Lion Knights' Castle"
+    "10316": "Rivendell", "75192": "Millennium Falcon UCS", 
+    "21333": "The Starry Night", "6886": "Galactic Peace Keeper", 
+    "10305": "Lion Knights' Castle"
 }
 
 @st.cache(ttl=3600, show_spinner=False)
@@ -23,7 +24,7 @@ def get_lego_info(sid):
     info = {"name": nombre_base, "img": f"https://images.brickset.com/sets/images/{s}-1.jpg"}
     try:
         r = requests.get(f"https://rebrickable.com/api/v3/lego/sets/{s}-1/", 
-                         headers={"Authorization": "key 9d7b97368d90473950669f64e2621453"}, timeout=1)
+                         headers={"Authorization": "key 9d7b97368d90473950669f64e2621453"}, timeout=1.2)
         if r.status_code == 200:
             data = r.json()
             if data.get('name'): info["name"] = data['name']
@@ -31,37 +32,35 @@ def get_lego_info(sid):
     except: pass
     return info
 
-# 3. Diseño de Tablas ALE!
+# 3. Función de tabla con diseño ALE! (Sin SetID)
 def pintar_tabla_ale(df):
-    if df.empty: return "<p>No hay datos disponibles</p>"
-    # Renombrar SetID a Set para visualización
-    df_visual = df.rename(columns={"SetID": "Set"})
+    if df.empty: return "<p>No hay datos registrados todavía.</p>"
+    # Renombrado forzado para la vista
+    df_v = df.rename(columns={"SetID": "Set", "Socio Entrega": "Socio", "Socio Recibe": "Destinatario"})
     
-    html = '<table style="width:100%; border-collapse: separate; border-spacing: 0; font-family: sans-serif; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">'
+    html = '<table style="width:100%; border-collapse: separate; border-spacing: 0; font-family: sans-serif; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">'
     html += '<tr style="background-color: #2E7D32; color: white; text-align: left;">'
-    for col in df_visual.columns:
-        html += f'<th style="padding: 15px; border-bottom: 1px solid #ddd;">{col}</th>'
+    for col in df_v.columns:
+        html += f'<th style="padding: 15px;">{col}</th>'
     html += '</tr>'
-    for _, row in df_visual.iterrows():
+    for _, row in df_v.iterrows():
         html += '<tr>'
-        for col in df_visual.columns:
+        for col in df_v.columns:
             val = row[col]
             if col == "Imagen":
-                html += f'<td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;"><img src="{val}" width="80" style="border-radius: 5px; border: 1px solid #eee;" onerror="this.src=\'https://via.placeholder.com/80?text=LEGO\'"></td>'
+                html += f'<td style="padding: 10px; border-top: 1px solid #eee; text-align: center;"><img src="{val}" width="90" style="border-radius: 5px;" onerror="this.src=\'https://via.placeholder.com/90?text=LEGO\'"></td>'
             else:
-                html += f'<td style="padding: 15px; border-bottom: 1px solid #eee;">{val}</td>'
+                html += f'<td style="padding: 15px; border-top: 1px solid #eee;">{val}</td>'
         html += '</tr>'
     html += '</table>'
     return html
 
-# --- CABECERA CON LOGO ---
-col1, col2 = st.columns([1, 4])
-with col1:
-    # Logo oficial de ALE! (Asociación de Coleccionistas de LEGO en España)
-    st.image("http://www.alebricks.com/wp-content/uploads/2015/05/logo_ale_web.png", width=150)
-with col2:
-    st.title("Sistema de Intercambio ALE!")
-    st.subheader("Plataforma de gestión de sets entre socios")
+# --- CABECERA MEJORADA ---
+st.write('<div style="display: flex; align-items: center; margin-bottom: 20px;">'
+         '<img src="https://upload.wikimedia.org/wikipedia/commons/2/24/LEGO_logo.svg" width="80" style="margin-right: 20px;">'
+         '<div><h1 style="margin: 0; color: #d11111;">ALE! SWAP</h1>'
+         '<p style="margin: 0; font-weight: bold; font-size: 1.2em;">SISTEMA DE INTERCAMBIO MASIVO DE SETS ENTRE SOCIOS</p></div>'
+         '</div>', unsafe_allow_html=True)
 
 try:
     inv = pd.read_csv(URL_INV).fillna("").astype(str)
@@ -69,25 +68,26 @@ try:
     inv.columns = [c.strip() for c in inv.columns]
     des.columns = [c.strip() for c in des.columns]
 
-    with st.spinner("Sincronizando con la base de datos de ALE!..."):
+    with st.spinner("Actualizando catálogo masivo..."):
         for df in [inv, des]:
-            nombres, fotos = [], []
+            n_list, f_list = [], []
             for sid in df["SetID"]:
                 res = get_lego_info(sid)
-                nombres.append(res["name"])
-                fotos.append(res["img"])
-            df["Nombre"] = nombres
-            df["Imagen"] = fotos
+                n_list.append(res["name"])
+                f_list.append(res["img"])
+            df["Nombre"] = n_list
+            df["Imagen"] = f_list
 
-    st.header("📦 Sets Disponibles (Inventario)")
+    # SECCIONES
+    st.header("📦 Inventario de la Asociación")
     st.markdown(pintar_tabla_ale(inv[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("❤️ Sets Buscados (Deseos)")
+    st.header("❤️ Lista Global de Deseos")
     st.markdown(pintar_tabla_ale(des[["Socio", "SetID", "Nombre", "Imagen"]]), unsafe_allow_html=True)
 
-    st.header("🚀 Propuesta de Intercambio Óptima")
+    st.header("🚀 Propuesta de Intercambio Circular")
     G = nx.DiGraph()
-    master_info = pd.concat([inv, des]).drop_duplicates('SetID').set_index('SetID')
+    m_info = pd.concat([inv, des]).drop_duplicates('SetID').set_index('SetID')
 
     for _, rd in des.iterrows():
         pide, sid = rd["Socio"].strip(), rd["SetID"].strip()
@@ -103,12 +103,14 @@ try:
         for j in range(len(mejor)):
             u1, u2 = mejor[j], mejor[(j+1)%len(mejor)]
             sid_c = G[u1][u2]["sid"]
-            n_c = master_info.loc[sid_c, "Nombre"] if sid_c in master_info.index else f"Set {sid_c}"
-            i_c = master_info.loc[sid_c, "Imagen"] if sid_c in master_info.index else ""
+            n_c = m_info.loc[sid_c, "Nombre"] if sid_c in m_info.index else f"Set {sid_c}"
+            i_c = m_info.loc[sid_c, "Imagen"] if sid_c in m_info.index else ""
             res_list.append({"Socio Entrega": u1, "SetID": sid_c, "Nombre": n_c, "Imagen": i_c, "Socio Recibe": u2})
+        
+        # Tabla final con los nombres de columna corregidos
         st.markdown(pintar_tabla_ale(pd.DataFrame(res_list)), unsafe_allow_html=True)
     else:
-        st.info("No hay ciclos de intercambio posibles todavía. ¡Sigue añadiendo sets!")
+        st.info("Buscando combinaciones... Todavía no hay un ciclo de intercambio cerrado.")
 
 except Exception as e:
-    st.error(f"Hubo un problema al cargar la aplicación: {e}")
+    st.error(f"Error en la plataforma: {e}")
